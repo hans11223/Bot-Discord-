@@ -1,5 +1,6 @@
 import os
 import asyncio
+import random
 import sqlite3
 import discord
 from discord.ext import commands
@@ -121,6 +122,48 @@ async def assigner(ctx, membre: discord.Member, groupe: str):
     db.execute("UPDATE contacts SET groupe=? WHERE user_id=?", (groupe, membre.id))
     db.commit()
     await ctx.send(f"{membre} affecté au groupe {groupe}")
+
+
+# ============================================
+# DIVISER UN GROUPE EN SOUS-GROUPES (admin uniquement)
+# ============================================
+@bot.command()
+async def diviser(ctx, groupe: str, n: int):
+    """
+    Divise un groupe existant en n sous-groupes à peu près égaux, répartis au hasard.
+    Usage: !diviser A 2   -> crée A1 et A2 à partir des inscrits du groupe A
+    Usage: !diviser tous 3 -> divise TOUS les inscrits en 3 sous-groupes (peu importe leur groupe actuel)
+    """
+    if not is_admin(ctx):
+        return
+
+    if n < 2:
+        await ctx.send("n doit être au moins 2.")
+        return
+
+    if groupe.lower() == "tous":
+        rows = db.execute("SELECT user_id FROM contacts").fetchall()
+    else:
+        rows = db.execute("SELECT user_id FROM contacts WHERE groupe=?", (groupe,)).fetchall()
+
+    if not rows:
+        await ctx.send("Aucun inscrit trouvé pour ce groupe.")
+        return
+
+    user_ids = [r[0] for r in rows]
+    random.shuffle(user_ids)
+
+    prefixe = "G" if groupe.lower() == "tous" else groupe
+    for i, user_id in enumerate(user_ids):
+        sous_groupe = f"{prefixe}{(i % n) + 1}"
+        db.execute("UPDATE contacts SET groupe=? WHERE user_id=?", (sous_groupe, user_id))
+    db.commit()
+
+    noms = ", ".join(f"{prefixe}{i + 1}" for i in range(n))
+    await ctx.send(
+        f"✅ {len(user_ids)} inscrits répartis en {n} sous-groupes : {noms}\n"
+        f"Utilise !diffuser {prefixe}1 ton message, !diffuser {prefixe}2 ton message, etc."
+    )
 
 
 # ============================================
